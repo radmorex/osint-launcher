@@ -1,0 +1,2 @@
+rich>=13,<16
+questionary>=2,<3
