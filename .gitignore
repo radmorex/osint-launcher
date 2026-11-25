@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+osint-reports/
+*.zip
+
+# Local collector modules: loaded at runtime, never committed or pushed
+collector/local/
+
+# Claude Code local files
+.claude/

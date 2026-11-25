@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSINT Collector</title>
+<style>
+:root{
+  --bg:#0a0707; --panel:#100b0b; --panel2:#171010; --line:#2a1616; --line2:#3a1d1d;
+  --fg:#ececec; --muted:#9a8a8a; --dim:#6a5555; --accent:#ff2b2b; --accent2:#3d0b0b;
+  --accent-fg:#ffd7d7; --glow:0 0 12px rgba(255,43,43,.35);
+  --ok:#4ade80; --maybe:#fbbf24; --no:#f87171; --new:#9aa4b2;
+  --font: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 var(--font)}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
+aside{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.brand{padding:16px 16px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+.brand b{font:600 15px/1 var(--mono);letter-spacing:.5px;color:var(--accent);text-shadow:var(--glow)} .brand small{color:var(--dim);margin-left:auto}
+.cases{flex:1;overflow:auto;padding:8px}
+.case{padding:9px 10px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}
+.case:hover{background:var(--panel2)} .case.on{background:var(--accent2);color:var(--accent-fg);box-shadow:inset 3px 0 0 var(--accent)}
+.case span{color:var(--muted);font-size:12px}
+.newcase{border-top:1px solid var(--line);padding:12px;display:grid;gap:8px}
+main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.top{padding:14px 20px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.title h1{font:600 18px/1.2 var(--mono);margin:0}
+.title h1::before{content:"> ";color:var(--accent)} .title .purpose{color:var(--muted);font-size:13px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:7px 10px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+button{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:#444} button.primary{background:#c40f0f;border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{background:var(--accent);box-shadow:var(--glow)}
+button.ghost{background:none;border-color:transparent;color:var(--muted)} button.ghost:hover{color:var(--fg);border-color:var(--line2)}
+button:disabled{opacity:.45;cursor:default}
+.progress{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.bar{flex:1;min-width:160px;height:6px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .4s}
+.busy{color:var(--accent)} .err{color:var(--no)}
+.tabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid var(--line)}
+.tab{padding:10px 12px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tab.on{color:var(--fg);border-color:var(--accent)} .tab .n{font-size:11px;background:var(--panel2);padding:1px 6px;border-radius:9px;margin-left:4px}
+.body{flex:1;overflow:auto;padding:16px 20px 40px}
+.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;color:var(--muted);font-size:13px}
+.group{margin-bottom:18px}
+.group h3{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 6px;font-weight:600}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+col.c-st{width:100px} col.c-conf{width:110px} col.c-src{width:22%} col.c-act{width:170px} col.c-why{width:20%}
+@media (max-width:1200px){ col.c-why, td.why{display:none} }
+@media (max-width:1000px){ col.c-src, td.src{display:none} col.c-act{width:150px} }
+td button{white-space:nowrap;padding:4px 10px}
+td.why{color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+button.del{padding:2px 6px;opacity:.35;margin-left:4px} tr.ent:hover button.del, details.folder summary:hover button.del{opacity:1}
+button.danger{color:#ff6b6b} button.danger:hover{border-color:#ff2b2b;color:#fff;background:#3d0b0b}
+details.folder summary button.del{float:right}
+.ficon{margin-right:6px;color:var(--accent);opacity:.8}
+details.folder{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:12px;background:var(--panel)}
+details.folder summary{cursor:pointer;list-style:none;padding:4px 0;color:var(--fg)}
+details.folder summary::-webkit-details-marker{display:none}
+details.folder summary::before{content:"▸ ";color:var(--accent)} details.folder[open] summary::before{content:"▾ "}
+details.folder[open] summary{margin-bottom:6px}
+.gh{display:flex;align-items:center;gap:10px;margin:0 0 6px} .gh h3{margin:0}
+td,th{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:left}
+th{color:var(--dim);font-weight:500;font-size:12px}
+tr.ent{cursor:pointer} tr.ent:hover{background:#1a0e0e} tr.ent.rej td{opacity:.45}
+.val{max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.val small{color:var(--muted);margin-left:6px}
+.conf{display:flex;align-items:center;gap:6px;min-width:110px;color:var(--muted);font-size:12px}
+.conf b{display:block;height:5px;border-radius:3px;background:var(--line2);width:60px;overflow:hidden}
+.conf b i{display:block;height:100%}
+.chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;background:var(--panel2);border:1px solid var(--line2);color:var(--muted);margin:1px 2px 1px 0;white-space:nowrap}
+.chip.warn{color:var(--maybe);border-color:#4a3b10} .chip.src{color:#ff9c9c;border-color:#4d1a1a}
+.st{display:inline-flex;gap:2px}
+.st button{padding:2px 7px;font-size:12px;border-radius:6px;background:none;border-color:var(--line2);color:var(--dim)}
+.st button.on.ok{color:#0a0a0a;background:var(--ok);border-color:var(--ok)}
+.st button.on.maybe{color:#0a0a0a;background:var(--maybe);border-color:var(--maybe)}
+.st button.on.no{color:#0a0a0a;background:var(--no);border-color:var(--no)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.empty{color:var(--muted);padding:40px 0;text-align:center}
+.drawer{position:fixed;top:0;right:0;width:min(520px,100%);height:100%;background:var(--panel);border-left:1px solid var(--line);
+  transform:translateX(100%);transition:transform .18s;display:flex;flex-direction:column;z-index:5}
+.drawer.on{transform:none}
+.drawer header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:flex-start}
+.drawer header h2{font-size:15px;margin:0;word-break:break-all;flex:1}
+.drawer .content{padding:14px 16px;overflow:auto;display:grid;gap:14px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 10px;font-size:13px}
+.kv div:nth-child(odd){color:var(--muted)} .kv div{word-break:break-word}
+.claim{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+.claim code{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.notice{border:1px solid #3b3210;background:#17140a;color:#e9d9a0;border-radius:8px;padding:8px 12px;font-size:13px}
+.hint{color:var(--dim);font-size:12px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1d1d1d;border:1px solid var(--line2);
+  padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+.settings{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:900px}
+.settings label{display:grid;gap:4px;color:var(--muted);font-size:13px}
+.mods{margin-top:16px} .mods td{font-size:13px}
+@media (max-width:860px){.app{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><b>▓▒░ OSINT·COLLECTOR</b><small id="ver"></small></div>
+    <div class="cases" id="cases"></div>
+    <form class="newcase" id="newcase">
+      <input name="name" placeholder="Назва справи" required>
+      <input name="purpose" placeholder="Мета / правова підстава" required>
+      <div class="row">
+        <select name="profile" id="nc-profile" style="flex:1"></select>
+        <button class="primary">Створити</button>
+      </div>
+    </form>
+  </aside>
+  <main id="main"><div class="empty">Створіть справу ліворуч або виберіть наявну.</div></main>
+</div>
+<div class="drawer" id="drawer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TYPE_LABEL = {account:'Акаунти', username:'Нікнейми', email:'Email', phone:'Телефони', person:'Імена',
+  location:'Локації', org:'Організації', fingerprint:'Відбитки', file:'Файли', domain:'Домени', ip:'IP-адреси',
+  url:'Посилання', note:'Нотатки'};
+const TYPE_ORDER = Object.keys(TYPE_LABEL);
+const FLAG_LABEL = {freemail:'поштовий сервіс', disposable:'одноразова', role:'службова', platform:'платформа',
+  cdn:'CDN', generic:'загальний нік', supernode:'суперновузол', wildcard:'wildcard DNS', subdomain:'піддомен'};
+const STATUS_COLOR = {ok:'var(--ok)', maybe:'var(--maybe)', no:'var(--no)', new:'var(--new)'};
+let META = null, CASES = [], CUR = null, VIEW = null, TAB = 'dossier', TIMER = null;
+const UI = {q:'', min:0, hideNo:true, onlyNew:false};
+try { Object.assign(UI, JSON.parse(localStorage.getItem('collector-ui')) || {}); } catch(e) {}
+const saveUI = () => { try { localStorage.setItem('collector-ui', JSON.stringify(UI)); } catch(e) {} };
+
+async function api(path, opts={}){
+  const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts,
+                               body: opts.body ? JSON.stringify(opts.body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'), 2600); }
+
+/* ---------- cases ---------- */
+async function loadCases(){
+  CASES = await api('/api/cases');
+  $('#cases').innerHTML = CASES.length ? CASES.map(c => `<div class="case ${c.id===CUR?'on':''}" data-id="${c.id}">
+      <div>${esc(c.name)}</div><span>${c.n_entities}</span></div>`).join('') : '<div class="hint" style="padding:10px">Справ ще немає</div>';
+  document.querySelectorAll('.case').forEach(el => el.onclick = () => openCase(+el.dataset.id));
+}
+$('#newcase').onsubmit = async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const c = await api('/api/cases', {method:'POST', body:{name:f.get('name'), purpose:f.get('purpose'),
+                                                          settings:{profile:f.get('profile')}}});
+  e.target.reset(); $('#nc-profile').value = META.defaults.profile;
+  await loadCases(); openCase(c.id);
+};
+
+async function openCase(id){
+  CUR = id; TAB = 'dossier'; SNAP = ''; closeDrawer();
+  await refresh(true); loadCases();
+}
+let SNAP = '';
+async function refresh(full=false){
+  if(!CUR) return;
+  let next;
+  try { next = await api(`/api/cases/${CUR}`); } catch(e) { toast(e.message); return; }
+  const snap = JSON.stringify(next);
+  const changed = snap !== SNAP;
+  VIEW = next; SNAP = snap;
+  if(full || !$('#main .top')) renderShell();
+  if(full || changed){ renderProgress(); renderTabs(); renderBody(full); }
+  clearTimeout(TIMER);
+  TIMER = setTimeout(refresh, VIEW.progress.busy ? 1500 : 6000);
+}
+
+/* ---------- layout ---------- */
+function renderShell(){
+  const c = VIEW.case;
+  $('#main').innerHTML = `
+  <div class="top">
+    <div class="title"><h1>${esc(c.name)}</h1><span class="purpose">${esc(c.purpose || 'мета не вказана')}</span>
+      <span style="margin-left:auto" class="row">
+        <button id="delcase" class="ghost danger" title="Видалити справу разом з її доказами">🗑</button>
+        <button id="linkfiles" title="Порівняти файли справи: спільні відбитки, стиль письма, схожі фото">🔗 Зв'язати файли</button>
+        <a href="/api/cases/${c.id}/export.osint.json"><button>⬇ OSINT Graph</button></a>
+        <a href="/api/cases/${c.id}/export.csv"><button>⬇ CSV</button></a>
+      </span></div>
+    <form class="row" id="seed">
+      <select name="type" style="width:150px"><option value="">авто-тип</option>
+        ${[['username','нік'],['email','email'],['phone','телефон'],['domain','домен'],['ip','IP'],['url','URL'],
+           ['org','компанія'],['file','файл / папка']].map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
+      <input name="value" placeholder="нік, email, телефон, домен, компанія, шлях до папки…" style="flex:1;min-width:220px" required autocomplete="off">
+      <button class="primary">Додати сід і зібрати</button>
+    </form>
+    <div class="progress" id="progress"></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="body" id="body"></div>`;
+  $('#delcase').onclick = async () => {
+    const c = VIEW.case;
+    if(!confirm(`Видалити справу «${c.name}» з усіма знахідками й копіями доказів?\nЦе не можна скасувати. Ваші файли на диску не чіпаються.`)) return;
+    await api(`/api/cases/${c.id}`, {method:'DELETE'});
+    CUR = null; VIEW = null; SNAP = '';
+    $('#main').innerHTML = '<div class="empty">Справу видалено. Виберіть іншу або створіть нову.</div>';
+    await loadCases(); if(CASES.length) openCase(CASES[0].id);
+    toast('Справу видалено');
+  };
+  $('#linkfiles').onclick = async () => {
+    const b = $('#linkfiles'); b.disabled = true; b.textContent = '⏳ порівнюю…';
+    try {
+      const r = await api(`/api/cases/${CUR}/link`, {method:'POST'});
+      showLinkReport(r); refresh();
+    } catch(err) { toast(err.message); }
+    b.disabled = false; b.textContent = "🔗 Зв'язати файли";
+  };
+  $('#seed').onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      const ent = await api(`/api/cases/${CUR}/seeds`, {method:'POST', body:{value:f.get('value'), type:f.get('type')}});
+      toast(ent.type === 'folder' ? `Додано файлів: ${ent.count}` : `Сід додано: ${ent.type} ${ent.value}`);
+      e.target.reset(); refresh();
+    } catch(err) { toast(err.message); }
+  };
+}
+function renderProgress(){
+  const p = VIEW.progress, total = p.queued + p.running + p.done + p.error + p.skipped;
+  const pct = total ? Math.round((p.done + p.error + p.skipped) / total * 100) : 0;
+  $('#progress').innerHTML = `
+    <span class="${p.busy?'busy':''}">${p.busy ? '● збір триває' : '○ очікування'}</span>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <span>черга ${p.queued} · виконується ${p.running} · готово ${p.done}</span>
+    ${p.error ? `<span class="err">помилок ${p.error}</span>` : ''}
+    <span>бюджет ${p.budget_used}/${p.budget}</span>`;
+}
+function counts(){
+  const ents = VIEW.entities;
+  return {
+    dossier: ents.filter(e => e.status !== 'no').length,
+    triage: ents.filter(e => e.pivot === 'suggested' && e.status !== 'no').length
+            + ents.filter(e => e.status === 'new' && e.confidence >= 0.3).length,
+    log: VIEW.runs.length,
+  };
+}
+function renderTabs(){
+  const n = counts();
+  const tabs = [['dossier','Досьє',n.dossier], ['triage','Тріаж',n.triage], ['log','Журнал',n.log], ['settings','Налаштування','']];
+  $('#tabs').innerHTML = tabs.map(([k,l,c]) => `<div class="tab ${TAB===k?'on':''}" data-k="${k}">${l}${c!==''?`<span class="n">${c}</span>`:''}</div>`).join('');
+  document.querySelectorAll('.tab').forEach(el => el.onclick = () => { TAB = el.dataset.k; renderTabs(); renderBody(true); });
+}
+function renderBody(force){
+  // Do not rebuild a form the analyst is typing in.
+  const a = document.activeElement;
+  if(!force && a && $('#body').contains(a) && (a.tagName==='INPUT' || a.tagName==='SELECT' || a.tagName==='TEXTAREA')) return;
+  ({dossier:renderDossier, triage:renderTriage, log:renderLog, settings:renderSettings})[TAB]();
+}
+
+/* ---------- dossier ---------- */
+function confCell(e){
+  const pct = Math.round(e.confidence*100), col = pct>=70?'var(--ok)':pct>=40?'var(--maybe)':'var(--no)';
+  return `<div class="conf"><b><i style="width:${pct}%;background:${col}"></i></b>${e.is_seed?'сід':pct+'%'}</div>`;
+}
+function statusBtns(e){
+  return `<span class="st" data-id="${e.id}">${[['ok','✓'],['maybe','?'],['no','✗']].map(([s,l]) =>
+    `<button class="${s} ${e.status===s?'on':''}" data-s="${s}" title="${{ok:'підтверджено',maybe:'ймовірно',no:'хибний слід'}[s]}">${l}</button>`).join('')}</span>`;
+}
+const fileName = v => String(v).split(/[\\/]/).pop();
+const fileDir = v => { const parts = String(v).split(/[\\/]/); parts.pop(); return parts.join('/'); };
+const shown = e => e.type === 'file' ? fileName(e.value) : e.value;
+const plural = (n, one, few, many) => { const d = n % 10, h = n % 100;
+  return `${n} ${d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many}`; };
+
+function entRow(e, extra='', why=null){
+  const platform = e.attrs && e.attrs.platform ? `<small>${esc(e.attrs.platform)}</small>` : '';
+  const flags = (e.flags||[]).filter(f=>f!=='subdomain').map(f=>`<span class="chip warn">${esc(FLAG_LABEL[f]||f)}</span>`).join('');
+  const src = e.sources.map(s=>`<span class="chip src">${esc(s)}</span>`).join('');
+  return `<tr class="ent ${e.status==='no'?'rej':''}" data-id="${e.id}">
+    <td>${statusBtns(e)}</td>
+    <td class="val" title="${esc(e.value)}"><span class="dot" style="background:${STATUS_COLOR[e.status]}"></span>${e.type==='file'?'<span class="ficon">▤</span>':''}${esc(shown(e))}${platform}</td>
+    <td>${confCell(e)}</td>
+    <td class="src">${src}${flags}</td>
+    ${why!==null ? `<td class="why" title="${esc(why)}">${esc(why)}</td>` : ''}
+    <td style="text-align:right">${extra}<button class="ghost del" data-del="${e.id}" title="Прибрати зі справи (файл на диску не чіпаємо)">🗑</button></td></tr>`;
+}
+const cols = (why=false) => `<colgroup><col class="c-st"><col><col class="c-conf"><col class="c-src">${why?'<col class="c-why">':''}<col class="c-act"></colgroup>`;
+const tbl = (rows, why=false) => `<table>${cols(why)}${rows}</table>`;
+function filtered(){
+  const q = UI.q.trim().toLowerCase();
+  return VIEW.entities.filter(e =>
+    (!UI.hideNo || e.status !== 'no') &&
+    (!UI.onlyNew || e.status === 'new') &&
+    (e.is_seed || e.confidence >= UI.min/100 || e.status === 'ok') &&
+    (!q || e.value.toLowerCase().includes(q) || JSON.stringify(e.attrs).toLowerCase().includes(q)));
+}
+function renderDossier(){
+  const ents = filtered();
+  const seeds = ents.filter(e => e.is_seed);
+  const groups = {};
+  ents.filter(e => !e.is_seed).forEach(e => (groups[e.type] = groups[e.type] || []).push(e));
+  const html = [`<div class="filters">
+      <input id="f-q" placeholder="пошук…" value="${esc(UI.q)}" style="width:220px">
+      <label>впевненість ≥ <input id="f-min" type="number" min="0" max="100" step="10" value="${UI.min}" style="width:70px">%</label>
+      <label><input id="f-no" type="checkbox" ${UI.hideNo?'checked':''}> сховати хибні</label>
+      <label><input id="f-new" type="checkbox" ${UI.onlyNew?'checked':''}> лише неперевірені</label>
+      ${VIEW.entities.some(e => e.status === 'no') ? `<button class="ghost danger" id="del-rejected">🗑 Прибрати хибні (${VIEW.entities.filter(e => e.status === 'no').length})</button>` : ''}
+      <span style="margin-left:auto">${ents.length} з ${VIEW.entities.length}</span></div>`];
+  if(!VIEW.entities.length) html.push('<div class="empty">Додайте сід угорі: нік, email, телефон або домен.</div>');
+  const plainSeeds = seeds.filter(e => e.type !== 'file');
+  const byDir = {};
+  seeds.filter(e => e.type === 'file').forEach(e => (byDir[fileDir(e.value)] = byDir[fileDir(e.value)] || []).push(e));
+  const lone = Object.values(byDir).filter(l => l.length === 1).flat();
+  const folders = Object.entries(byDir).filter(([, l]) => l.length > 1);
+  if(plainSeeds.length || lone.length)
+    html.push(`<div class="group"><h3>Сіди</h3>${tbl([...plainSeeds, ...lone].map(e=>entRow(e)).join(''))}</div>`);
+  for(const [dir, list] of folders){
+    const short = dir.split('/').slice(-2).join('/');
+    const linked = list.filter(e => (e.attrs||{})['схожий_стиль']).length;
+    html.push(`<details class="group folder" ${UI.open && UI.open[dir] ? 'open' : ''} data-dir="${esc(dir)}">
+      <summary><span class="ficon">📁</span> <b title="${esc(dir)}">${esc(short)}</b> · ${plural(list.length, 'файл', 'файли', 'файлів')}${linked ? ` · <span class="chip src">${linked} зі схожим стилем</span>` : ''}
+        <button class="ghost del" data-del-folder="${esc(dir)}" title="Прибрати всі файли папки зі справи (файли на диску не чіпаємо)">🗑</button></summary>
+      ${tbl(list.sort((a,b)=>fileName(a.value).localeCompare(fileName(b.value))).map(e=>entRow(e)).join(''))}</details>`);
+  }
+  for(const t of TYPE_ORDER){
+    const list = (groups[t]||[]).sort((a,b) => b.confidence - a.confidence || a.value.localeCompare(b.value));
+    if(!list.length) continue;
+    html.push(`<div class="group"><h3>${TYPE_LABEL[t]} · ${list.length}</h3>${tbl(list.map(e => entRow(e,
+      e.pivot==='suggested' ? `<button class="ghost" data-expand="${e.id}" title="${esc(e.pivot_reason)}">розгорнути ↗</button>` : '')).join(''))}</div>`);
+  }
+  $('#body').innerHTML = html.join('');
+  $('#f-q').oninput = e => { UI.q = e.target.value; saveUI(); renderDossierKeepFocus('#f-q'); };
+  $('#f-min').onchange = e => { UI.min = +e.target.value || 0; saveUI(); renderDossier(); };
+  $('#f-no').onchange = e => { UI.hideNo = e.target.checked; saveUI(); renderDossier(); };
+  $('#f-new').onchange = e => { UI.onlyNew = e.target.checked; saveUI(); renderDossier(); };
+  document.querySelectorAll('details.folder').forEach(d => d.ontoggle = () => {
+    UI.open = UI.open || {}; UI.open[d.dataset.dir] = d.open; saveUI(); });
+  bindRows();
+}
+function renderDossierKeepFocus(sel){
+  const pos = $(sel).selectionStart; renderDossier(); const el=$(sel); el.focus(); el.setSelectionRange(pos,pos);
+}
+function subtreeSize(ids){
+  const kids = {};
+  VIEW.entities.forEach(e => { if(e.parent_id != null) (kids[e.parent_id] = kids[e.parent_id] || []).push(e.id); });
+  const seen = new Set(), stack = [...ids];
+  while(stack.length){ const i = stack.pop(); if(seen.has(i)) continue; seen.add(i); (kids[i] || []).forEach(k => stack.push(k)); }
+  return seen.size;
+}
+async function deleteEntities(ids, what){
+  const n = subtreeSize(ids), extra = n - ids.length;
+  const files = ids.some(i => (VIEW.entities.find(e => e.id === i) || {}).type === 'file');
+  if(!confirm(`Прибрати зі справи ${what}?` + (extra > 0 ? `\nРазом з ${extra} знахідками, що випливли лише звідти (підтверджене іншими джерелами лишиться).` : '')
+              + (files ? '\n\nФайли на диску НЕ видаляються, лише записи у справі.' : ''))) return;
+  const r = await api(`/api/cases/${CUR}/delete-entities`, {method:'POST', body:{ids}});
+  closeDrawer();
+  toast(`Прибрано ${r.deleted}` + (r.kept ? `, лишилось підтверджених іншими джерелами: ${r.kept}` : ''));
+  refresh(true);
+}
+
+function bindRows(){
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const e = VIEW.entities.find(x => x.id === +b.dataset.del);
+    deleteEntities([+b.dataset.del], `«${e ? shown(e) : b.dataset.del}»`);
+  });
+  document.querySelectorAll('[data-del-folder]').forEach(b => b.onclick = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const dir = b.dataset.delFolder;
+    const ids = VIEW.entities.filter(e => e.type === 'file' && fileDir(e.value) === dir).map(e => e.id);
+    deleteEntities(ids, `папку «${dir.split('/').slice(-2).join('/')}» (${plural(ids.length, 'файл', 'файли', 'файлів')})`);
+  });
+  const rej = document.getElementById('del-rejected');
+  if(rej) rej.onclick = () => {
+    const ids = VIEW.entities.filter(e => e.status === 'no').map(e => e.id);
+    deleteEntities(ids, `усі хибні сліди (${ids.length})`);
+  };
+  document.querySelectorAll('.st button').forEach(b => b.onclick = async ev => {
+    ev.stopPropagation();
+    const id = +b.parentElement.dataset.id, s = b.dataset.s;
+    const e = VIEW.entities.find(x => x.id===id);
+    await api(`/api/entities/${id}/status`, {method:'POST', body:{status: e.status===s ? 'new' : s}});
+    refresh();
+  });
+  document.querySelectorAll('[data-expand]').forEach(b => b.onclick = async ev => {
+    ev.stopPropagation();
+    await api(`/api/entities/${b.dataset.expand}/expand`, {method:'POST'}); toast('Розгортаю…'); refresh();
+  });
+  document.querySelectorAll('tr.ent').forEach(r => r.onclick = () => openDrawer(+r.dataset.id));
+}
+
+/* ---------- triage ---------- */
+function renderTriage(){
+  const sug = VIEW.entities.filter(e => e.pivot==='suggested' && e.status!=='no').sort((a,b)=>b.confidence-a.confidence);
+  const fresh = VIEW.entities.filter(e => e.status==='new' && e.confidence>=0.3).sort((a,b)=>b.confidence-a.confidence);
+  const byType = {};
+  sug.forEach(e => (byType[e.type] = byType[e.type] || []).push(e));
+  const cost = e => +((e.pivot_reason.match(/вартість ≈(\d+)/) || [0,0])[1]);
+  const sugHtml = TYPE_ORDER.filter(t => byType[t]).map(t => {
+    const list = byType[t], total = list.reduce((s,e) => s + cost(e), 0);
+    return `<div class="group"><div class="gh"><h3>${TYPE_LABEL[t]} · ${list.length}</h3>
+      ${list.length > 1 ? `<button class="ghost" data-expand-all="${t}" data-n="${list.length}" data-cost="${total}">розгорнути всі (вартість ≈${total})</button>` : ''}</div>
+      ${tbl(list.map(e => entRow(e, `<button data-expand="${e.id}" title="${esc(e.pivot_reason)}">розгорнути ↗</button>`, e.pivot_reason.split(' · ')[0])).join(''), true)}</div>`;
+  }).join('');
+  $('#body').innerHTML = `
+    <div class="group"><h3>Пропоновані півоти · ${sug.length}</h3>
+      <p class="hint">Система не розгорнула їх сама: мала впевненість, межа глибини, поза скоупом або вичерпано бюджет.
+        Ручне розгортання не перевіряє ці обмеження, тож вирішуєте ви.</p></div>
+    ${sug.length ? sugHtml : '<div class="hint" style="margin-bottom:18px">Немає.</div>'}
+    <div class="group"><h3>Неперевірені знахідки · ${fresh.length}</h3>
+      <p class="hint">Позначте ✓ ? ✗. Хибний слід (✗) більше не розгортається і не потрапляє в експорт.</p>
+      ${fresh.length ? tbl(fresh.map(e => entRow(e)).join('')) : '<div class="hint">Усе переглянуто.</div>'}</div>`;
+  bindRows();
+  document.querySelectorAll('[data-expand-all]').forEach(b => b.onclick = async () => {
+    const list = byType[b.dataset.expandAll];
+    if(!confirm(`Розгорнути ${b.dataset.n} сутностей? Це ≈${b.dataset.cost} запусків модулів, вони підуть понад бюджет справи.`)) return;
+    b.disabled = true;
+    for(const e of list) await api(`/api/entities/${e.id}/expand`, {method:'POST'}).catch(() => {});
+    toast(`Розгортаю ${list.length}…`); refresh();
+  });
+}
+
+/* ---------- log ---------- */
+function renderLog(){
+  const rows = VIEW.runs.map(r => `<tr>
+    <td>${esc(r.module)}</td><td class="val">${esc(r.entity_value)}</td>
+    <td style="color:${{done:'var(--ok)',error:'var(--no)',running:'var(--accent)'}[r.state]||'var(--muted)'}">${esc(r.state)}${r.cached?' (кеш)':''}</td>
+    <td>${r.found}</td>
+    <td>${r.started && r.finished ? ((r.finished - r.started).toFixed(1)+' с') : ''}</td>
+    <td class="err" style="max-width:420px">${esc(r.error)}</td></tr>`).join('');
+  $('#body').innerHTML = rows ? `<table><tr><th>модуль</th><th>вхід</th><th>стан</th><th>знайдено</th><th>час</th><th>помилка</th></tr>${rows}</table>`
+                              : '<div class="empty">Запусків ще не було.</div>';
+}
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  const s = VIEW.settings;
+  $('#body').innerHTML = `
+  <form id="sform"><div class="settings">
+    <label>Профіль<select name="profile">${Object.entries(META.profiles).map(([k,v])=>`<option value="${k}" ${s.profile===k?'selected':''}>${k} — ${esc(v)}</option>`).join('')}</select></label>
+    <label>Глибина автоматичних півотів<input name="max_depth" type="number" min="0" max="5" value="${s.max_depth}"></label>
+    <label>Бюджет запусків модулів<input name="budget" type="number" min="1" max="5000" value="${s.budget}"></label>
+    <label>Поріг впевненості для авто-півоту, %<input name="auto_threshold" type="number" min="0" max="100" step="5" value="${Math.round(s.auto_threshold*100)}"></label>
+    <label>Поріг суперновузла (зв'язків)<input name="supernode" type="number" min="3" max="500" value="${s.supernode}"></label>
+    <label>Скоуп: домени через кому<input name="scope" value="${esc((s.scope||[]).join(', '))}" placeholder="порожньо — без обмежень"></label>
+    <label>Формат пошти співробітників<input name="email_format" value="${esc(s.email_format||'')}" placeholder="{first}.{last}@firma.ua"></label>
+  </div>
+  <div class="row" style="margin-top:12px"><button class="primary">Зберегти</button>
+    <span class="hint">Застосовується до нових рішень про півот. Вже зібране не перераховується.</span></div>
+  <table class="mods"><tr><th></th><th>модуль</th><th>вхід</th><th>профілі</th><th>стан</th><th>вимкнути</th></tr>
+    ${META.modules.map(m => `<tr><td>${m.available?'●':'○'}</td><td>${esc(m.title)}</td><td>${m.consumes.join(', ')}</td>
+      <td>${m.profiles.join(', ')}</td><td class="hint">${esc(m.reason || (m.env_key ? (m.has_key ? 'ключ '+m.env_key+' є' : (m.key_required ? 'потрібен ключ '+m.env_key : 'працює без ключа '+m.env_key)) : ''))}</td>
+      <td><input type="checkbox" name="off" value="${m.name}" ${s.modules_off.includes(m.name)?'checked':''}></td></tr>`).join('')}
+  </table></form>`;
+  $('#sform').onsubmit = async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    await api(`/api/cases/${CUR}`, {method:'PATCH', body:{settings:{
+      profile:f.get('profile'), max_depth:+f.get('max_depth'), budget:+f.get('budget'),
+      auto_threshold:(+f.get('auto_threshold'))/100, supernode:+f.get('supernode'),
+      scope:String(f.get('scope')).split(',').map(x=>x.trim()).filter(Boolean), modules_off:f.getAll('off'),
+      email_format:String(f.get('email_format')||'').trim()}}});
+    toast('Налаштування збережено'); refresh();
+  };
+}
+
+function showLinkReport(r){
+  const li = (arr, fn) => arr.length ? `<ul style="margin:4px 0 0 18px;padding:0">${arr.map(x=>`<li>${fn(x)}</li>`).join('')}</ul>` : '<div class="hint">нічого</div>';
+  $('#drawer').innerHTML = `
+    <header><h2>Зв'язки між файлами</h2><button class="ghost" id="dclose">✕</button></header>
+    <div class="content">
+      <div class="kv"><div>файлів</div><div>${r.files}</div><div>текстів для стилю</div><div>${r.texts}</div></div>
+      ${r.notes.map(n=>`<div class="notice">${esc(n)}</div>`).join('')}
+      ${r.too_short.length ? `<div class="hint">Замало слів (потрібно від 150): ${esc(r.too_short.slice(0,8).join(', '))}${r.too_short.length>8?' …':''}</div>` : ''}
+      <div><h3 class="hint" style="margin:0">СПІЛЬНІ ВІДБИТКИ В МЕТАДАНИХ</h3>
+        ${li(r.shared, x => `<b>${esc(x.what)}</b><br><span class="hint">${esc(x.files.join(', '))}</span>`)}</div>
+      <div><h3 class="hint" style="margin:0">СХОЖИЙ СТИЛЬ ПИСЬМА · зачіпка, не доказ</h3>
+        ${li(r.style, x => `${esc(x.a)} ↔ ${esc(x.b)}: <b>${Math.round(x.score*100)}%</b>
+          <span class="hint">(символи ${x.chars}, слова ${x.words}, звички ${x.habits}${x.shared_habits.length?'; спільне: '+esc(x.shared_habits.join(', ')):''})</span>`)}</div>
+      <div><h3 class="hint" style="margin:0">МАЙЖЕ ОДНАКОВІ ФОТО</h3>
+        ${li(r.images, x => `${esc(x.a)} ↔ ${esc(x.b)} <span class="hint">(відстань ${x.distance})</span>`)}</div>
+    </div>`;
+  $('#drawer').classList.add('on');
+  $('#dclose').onclick = closeDrawer;
+}
+
+/* ---------- drawer ---------- */
+async function openDrawer(id){
+  const e = await api(`/api/entities/${id}`);
+  const attrs = Object.entries(e.attrs||{}).filter(([k,v]) => v!=='' && v!=null);
+  const link = e.url && e.url.startsWith('http') ? `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">відкрити ↗</a>` : '';
+  $('#drawer').innerHTML = `
+    <header><h2>${esc(shown(e))}</h2><button class="ghost" id="dclose">✕</button></header>
+    <div class="content">
+      <div class="row">${statusBtns(e)} ${link}
+        <button class="ghost danger" data-del="${e.id}">🗑 Прибрати зі справи</button>
+        ${e.pivot==='suggested' ? `<button data-expand="${e.id}">розгорнути ↗</button>` : ''}</div>
+      ${e.pivot==='suggested' ? `<div class="notice">Не розгорнуто автоматично: ${esc(e.pivot_reason)}</div>` : ''}
+      ${e.pivot==='blocked' ? `<div class="notice">Півот заблоковано: ${esc(e.pivot_reason)}</div>` : ''}
+      <div class="kv">
+        <div>тип</div><div>${esc(e.type)}</div>
+        ${e.type==='file' ? `<div>шлях</div><div><code>${esc(e.value)}</code></div>` : ''}
+        <div>ключ</div><div><code>${esc(e.key)}</code></div>
+        <div>впевненість</div><div>${e.is_seed ? 'сід' : Math.round(e.confidence*100)+'%'}</div>
+        <div>глибина</div><div>${e.depth}</div>
+        <div>перше виявлення</div><div>${new Date(e.first_seen*1000).toLocaleString()}</div>
+        ${attrs.map(([k,v]) => `<div>${esc(k)}</div><div>${esc(typeof v==='object'?JSON.stringify(v):v)}</div>`).join('')}
+      </div>
+      <div><h3 class="hint" style="margin:0 0 6px">ТВЕРДЖЕННЯ ДЖЕРЕЛ · ${e.claims.length}</h3>
+        ${e.claims.map(c => `<div class="claim"><b>${esc(c.module)}</b> · ${Math.round(c.confidence*100)}% · ${new Date(c.observed*1000).toLocaleString()}
+          ${c.data && c.data.rel ? ` · <span class="hint">${esc(c.data.rel)}</span>` : ''}
+          <div>${esc(c.raw_value)}</div>
+          ${c.raw_sha256 ? `<code title="${esc(c.raw_path)}">доказ sha256 ${esc(c.raw_sha256.slice(0,16))}…</code>` : ''}</div>`).join('') || '<div class="hint">Сід, введений аналітиком.</div>'}
+      </div>
+    </div>`;
+  $('#drawer').classList.add('on');
+  $('#dclose').onclick = closeDrawer;
+  bindRows();
+  document.querySelectorAll('#drawer .st button').forEach(b => { const o=b.onclick; b.onclick = async ev => { await o(ev); openDrawer(id); }; });
+}
+function closeDrawer(){ $('#drawer').classList.remove('on'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeDrawer(); });
+
+/* ---------- boot ---------- */
+(async () => {
+  META = await api('/api/meta');
+  $('#ver').textContent = 'v' + META.version;
+  $('#nc-profile').innerHTML = Object.keys(META.profiles).map(k => `<option ${k===META.defaults.profile?'selected':''}>${k}</option>`).join('');
+  await loadCases();
+  if(CASES.length) openCase(CASES[0].id);
+})();
+</script>
+</body>
+</html>
